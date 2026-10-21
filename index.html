@@ -197,7 +197,7 @@
       <div class="card">
         <div class="grid">
           <label>
-            Random Agent API Key
+            Agent API Key
             <input id="agentKeyInput" type="text" readonly placeholder="Generated key appears here" />
           </label>
 
@@ -252,7 +252,7 @@
       <section class="result-panel">
         <h2>GitHub context</h2>
         <div id="githubJson" class="output-box">No data loaded yet.</div>
-        <div class="meta">This page stores keys in your browser localStorage for convenience. For production use, keep secrets server-side.</div>
+        <div class="meta">This app auto-loads a saved demo key from your browser. For real API calls, add your own GitHub/OpenAI keys. For free demo mode, the AI will run locally without external keys.</div>
       </section>
 
       <section class="result-panel">
@@ -289,7 +289,6 @@
           crypto.getRandomValues(bytes);
           return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
         }
-
         return 'gh-agent-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
       }
 
@@ -328,7 +327,7 @@
         const newKey = generateRandomKey();
         agentKeyInput.value = newKey;
         localStorage.setItem(storageKeys.agentKey, newKey);
-        setStatus('New random API key generated.', 'success');
+        setStatus('New random API key generated and saved.', 'success');
       }
 
       function sanitizeText(value) {
@@ -336,14 +335,19 @@
       }
 
       async function githubRequest(path, token) {
+        const headers = {
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'GitHub-AI-Agent-App'
+        };
+
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+
         const response = await fetch(`https://api.github.com${path}`, {
           method: 'GET',
-          headers: {
-            'Accept': 'application/vnd.github+json',
-            'Authorization': `Bearer ${token}`,
-            'X-GitHub-Api-Version': '2022-11-28',
-            'User-Agent': 'GitHub-AI-Agent-App'
-          }
+          headers
         });
 
         if (!response.ok) {
@@ -363,10 +367,6 @@
 
         if (!repo || !repo.includes('/')) {
           throw new Error('Please provide a valid GitHub repo in the format owner/repository.');
-        }
-
-        if (!gh) {
-          throw new Error('Please provide a GitHub token with repo access.');
         }
 
         if (!num || num < 1) {
@@ -491,20 +491,43 @@ Return:
 `;
       }
 
+      function buildLocalDemoResponse(context) {
+        const summary = context.type === 'issue'
+          ? `This issue appears to be a ${context.state} request from ${context.author}. The title is "${context.title}" and the requester likely needs a clear response and triage.`
+          : `This pull request is ${context.state} and appears to be authored by ${context.author}. The main changes are focused on ${context.changelog.slice(0, 3).map(f => f.filename).join(', ') || 'the repo'} and should be reviewed for correctness and regression risk.`;
+
+        return `Demo AI response (free mode):
+
+Summary:
+${summary}
+
+Suggested action:
+- Confirm scope and expected outcome.
+- Review the latest comments and code changes.
+- If this is a bug, validate the root cause before merging.
+- Ask for missing details only if the issue is still unclear.
+
+Suggested comment:
+Thanks for the update. I reviewed the issue/PR details and the request looks actionable. Please confirm the exact expected outcome and any edge cases, and I can help with the next step.`;
+      }
+
       async function askAiAgent() {
         try {
-          const repo = sanitizeText(repoInput.value);
-          const key = sanitizeText(openAiKey.value);
-          if (!key) {
-            throw new Error('Please provide an OpenAI API key.');
-          }
-
           const contextText = githubJson.textContent;
           if (contextText === 'No data loaded yet.' || contextText.trim() === '') {
             throw new Error('Load GitHub data first so the AI has context to analyze.');
           }
 
           const context = JSON.parse(contextText);
+          const key = sanitizeText(openAiKey.value);
+
+          if (!key) {
+            const response = buildLocalDemoResponse(context);
+            aiOutput.textContent = response;
+            setStatus('No external OpenAI key found. Running free demo mode.', 'success');
+            return;
+          }
+
           const prompt = buildAiPrompt(context);
 
           setStatus('Sending request to OpenAI…', 'success');
@@ -556,7 +579,7 @@ Return:
           }
 
           if (!token) {
-            throw new Error('Please provide a GitHub token.');
+            throw new Error('Please provide a GitHub token to post a comment.');
           }
 
           if (!num || num < 1) {
