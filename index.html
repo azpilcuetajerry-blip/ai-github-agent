@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitHub AI Agent</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --panel-strong: #1f2937;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --accent: #38bdf8;
+        --accent-2: #22c55e;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --border: rgba(148, 163, 184, 0.2);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: Inter, Arial, sans-serif;
+        background: linear-gradient(180deg, #020817 0%, #111827 100%);
+        color: var(--text);
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+
+      h1 {
+        font-size: 2.2rem;
+        margin: 0 0 12px;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 30px;
+        line-height: 1.6;
+      }
+
+      .card {
+        background: rgba(17, 24, 39, 0.9);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+        padding: 22px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 16px;
+      }
+
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      input, select, textarea, button {
+        font: inherit;
+      }
+
+      input, select, textarea {
+        width: 100%;
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        color: var(--text);
+        padding: 12px 14px;
+        outline: none;
+      }
+
+      input:focus, select:focus, textarea:focus {
+        border-color: rgba(56, 189, 248, 0.8);
+        box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.16);
+      }
+
+      textarea {
+        min-height: 160px;
+        resize: vertical;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      button {
+        border: none;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease;
+      }
+
+      button:hover { transform: translateY(-1px); }
+      button:active { transform: translateY(0); }
+
+      .primary {
+        background: linear-gradient(135deg, var(--accent), #2563eb);
+        color: white;
+      }
+
+      .secondary {
+        background: rgba(34, 197, 94, 0.12);
+        color: #bbf7d0;
+        border: 1px solid rgba(34, 197, 94, 0.2);
+      }
+
+      .danger {
+        background: rgba(239, 68, 68, 0.12);
+        color: #fecaca;
+        border: 1px solid rgba(239, 68, 68, 0.24);
+      }
+
+      .status {
+        margin-top: 24px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: rgba(15, 23, 42, 0.8);
+        color: var(--text);
+        display: none;
+      }
+
+      .status.visible { display: block; }
+      .status.error {
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #fecaca;
+        background: rgba(127, 29, 29, 0.18);
+      }
+      .status.success {
+        border-color: rgba(34, 197, 94, 0.4);
+        color: #bbf7d0;
+        background: rgba(20, 83, 45, 0.18);
+      }
+
+      .result-panel {
+        margin-top: 22px;
+      }
+
+      .result-panel h2 {
+        margin: 0 0 16px;
+      }
+
+      .output-box {
+        background: rgba(15, 23, 42, 0.82);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+        white-space: pre-wrap;
+        line-height: 1.7;
+        color: #dbeafe;
+        min-height: 180px;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin-top: 12px;
+      }
+
+      code {
+        background: rgba(30, 41, 59, 0.8);
+        color: #dbeafe;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+
+      @media (max-width: 720px) {
+        .container { padding-top: 20px; }
+        h1 { font-size: 1.8rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>GitHub AI Agent</h1>
+      <p class="subtitle">
+        Pull live issue or pull request details from GitHub, analyze them with OpenAI,
+        and optionally post a comment back to the repository.
+      </p>
+
+      <div class="card">
+        <div class="grid">
+          <label>
+            GitHub repo
+            <input id="repoInput" type="text" placeholder="owner/repository" value="octocat/Hello-World" />
+          </label>
+
+          <label>
+            Target type
+            <select id="targetType">
+              <option value="issue">Issue</option>
+              <option value="pull">Pull Request</option>
+            </select>
+          </label>
+
+          <label>
+            Number
+            <input id="numberInput" type="number" min="1" value="1" />
+          </label>
+
+          <label>
+            GitHub token
+            <input id="ghToken" type="password" placeholder="ghp_xxx or github_pat_xxx" />
+          </label>
+
+          <label>
+            OpenAI API key
+            <input id="openAiKey" type="password" placeholder="sk-..." />
+          </label>
+
+          <label>
+            Model
+            <select id="modelSelect">
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="loadBtn" class="primary">Load GitHub Data</button>
+          <button id="askBtn" class="secondary">Ask AI Agent</button>
+          <button id="postBtn" class="danger">Post AI Comment</button>
+        </div>
+
+        <div id="status" class="status"></div>
+      </div>
+
+      <section class="result-panel">
+        <h2>GitHub context</h2>
+        <div id="githubJson" class="output-box">No data loaded yet.</div>
+        <div class="meta">This page stores keys in your browser localStorage for convenience. For production use, keep secrets server-side.</div>
+      </section>
+
+      <section class="result-panel">
+        <h2>AI response</h2>
+        <div id="aiOutput" class="output-box">Waiting for analysis…</div>
+      </section>
+    </div>
+
+    <script>
+      const repoInput = document.getElementById('repoInput');
+      const targetType = document.getElementById('targetType');
+      const numberInput = document.getElementById('numberInput');
+      const ghToken = document.getElementById('ghToken');
+      const openAiKey = document.getElementById('openAiKey');
+      const modelSelect = document.getElementById('modelSelect');
+      const statusBox = document.getElementById('status');
+      const githubJson = document.getElementById('githubJson');
+      const aiOutput = document.getElementById('aiOutput');
+
+      const storageKeys = {
+        repo: 'gh_ai_agent_repo',
+        targetType: 'gh_ai_agent_target_type',
+        number: 'gh_ai_agent_number',
+        ghToken: 'gh_ai_agent_token',
+        openAiKey: 'gh_ai_agent_openai_key',
+        model: 'gh_ai_agent_model'
+      };
+
+      function setStatus(message, type = 'success') {
+        statusBox.textContent = message;
+        statusBox.classList.add('visible');
+        statusBox.classList.remove('success', 'error');
+        statusBox.classList.add(type);
+      }
+
+      function saveState() {
+        localStorage.setItem(storageKeys.repo, repoInput.value);
+        localStorage.setItem(storageKeys.targetType, targetType.value);
+        localStorage.setItem(storageKeys.number, numberInput.value);
+        localStorage.setItem(storageKeys.ghToken, ghToken.value);
+        localStorage.setItem(storageKeys.openAiKey, openAiKey.value);
+        localStorage.setItem(storageKeys.model, modelSelect.value);
+      }
+
+      function loadState() {
+        repoInput.value = localStorage.getItem(storageKeys.repo) || repoInput.value;
+        targetType.value = localStorage.getItem(storageKeys.targetType) || targetType.value;
+        numberInput.value = localStorage.getItem(storageKeys.number) || numberInput.value;
+        ghToken.value = localStorage.getItem(storageKeys.ghToken) || '';
+        openAiKey.value = localStorage.getItem(storageKeys.openAiKey) || '';
+        modelSelect.value = localStorage.getItem(storageKeys.model) || modelSelect.value;
+      }
+
+      function sanitizeText(value) {
+        return String(value ?? '').replace(/\s+/g, ' ').trim();
+      }
+
+      async function githubRequest(path, token) {
+        const response = await fetch(`https://api.github.com${path}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'Authorization': `Bearer ${token}`,
+            'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': 'GitHub-AI-Agent-App'
+          }
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`GitHub API error (${response.status}): ${text}`);
+        }
+
+        return response.json();
+      }
+
+      async function fetchIssueOrPr() {
+        saveState();
+
+        const repo = sanitizeText(repoInput.value);
+        const num = Number(numberInput.value);
+        const gh = sanitizeText(ghToken.value);
+
+        if (!repo || !repo.includes('/')) {
+          throw new Error('Please provide a valid GitHub repo in the format owner/repository.');
+        }
+
+        if (!gh) {
+          throw new Error('Please provide a GitHub token with repo access.');
+        }
+
+        if (!num || num < 1) {
+          throw new Error('Please enter a valid issue or PR number.');
+        }
+
+        if (targetType.value === 'issue') {
+          const issue = await githubRequest(`/repos/${repo}/issues/${num}`, gh);
+          const comments = await githubRequest(`/repos/${repo}/issues/${num}/comments`, gh);
+          return { issue, comments, type: 'issue' };
+        }
+
+        const pr = await githubRequest(`/repos/${repo}/pulls/${num}`, gh);
+        const files = await githubRequest(`/repos/${repo}/pulls/${num}/files?per_page=100`, gh);
+        const comments = await githubRequest(`/repos/${repo}/issues/${num}/comments`, gh);
+        return { pr, files, comments, type: 'pull' };
+      }
+
+      function formatContext(data) {
+        if (data.type === 'issue') {
+          const issue = data.issue;
+          const comments = data.comments || [];
+
+          return {
+            type: 'issue',
+            repo: repoInput.value,
+            number: issue.number,
+            title: issue.title,
+            state: issue.state,
+            author: issue.user?.login || 'unknown',
+            labels: issue.labels?.map(l => l.name).join(', ') || 'none',
+            body: issue.body || '(No description)',
+            comments: comments.map(c => ({ author: c.user?.login || 'unknown', body: c.body || '(empty comment)' }))
+          };
+        }
+
+        const pr = data.pr;
+        const files = Array.isArray(data.files) ? data.files : [];
+        const comments = Array.isArray(data.comments) ? data.comments : [];
+
+        return {
+          type: 'pull',
+          repo: repoInput.value,
+          number: pr.number,
+          title: pr.title,
+          state: pr.state,
+          author: pr.user?.login || 'unknown',
+          labels: pr.labels?.map(l => l.name).join(', ') || 'none',
+          summary: pr.body || '(No PR description)',
+          changelog: files.map(f => ({
+            filename: f.filename,
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            changes: f.changes
+          })),
+          comments: comments.map(c => ({ author: c.user?.login || 'unknown', body: c.body || '(empty comment)' }))
+        };
+      }
+
+      function renderGithubContext(context) {
+        githubJson.textContent = JSON.stringify(context, null, 2);
+      }
+
+      async function loadGitHubData() {
+        try {
+          setStatus('Loading data from GitHub…', 'success');
+          const data = await fetchIssueOrPr();
+          const context = formatContext(data);
+          renderGithubContext(context);
+          setStatus(`Loaded ${context.type} #${context.number} successfully.`, 'success');
+        } catch (error) {
+          console.error(error);
+          setStatus(error.message || 'Unexpected error while loading GitHub data.', 'error');
+        }
+      }
+
+      function buildAiPrompt(context) {
+        const base = `You are a GitHub AI Agent. Review the following GitHub ${context.type} and give a concise, actionable response.
+
+Repository: ${context.repo}
+Type: ${context.type}
+Number: ${context.number}
+Title: ${context.title}
+State: ${context.state}
+Author: ${context.author}
+Labels: ${context.labels}
+
+`;
+
+        if (context.type === 'issue') {
+          return `${base}
+Issue body:
+${context.body}
+
+Comments:
+${context.comments.map(c => `- ${c.author}: ${c.body}`).join('\n') || '- No comments'}
+
+Return:
+1. A short summary
+2. Likely priority / triage label
+3. Suggested response to the author
+4. Any missing info or follow-up questions
+`;
+        }
+
+        return `${base}
+PR summary:
+${context.summary}
+
+Files changed:
+${context.changelog.map(f => `- ${f.filename} (${f.status}) +${f.additions} -${f.deletions}`).join('\n') || '- No files changed'}
+
+Comments:
+${context.comments.map(c => `- ${c.author}: ${c.body}`).join('\n') || '- No comments'}
+
+Return:
+1. Quick review summary
+2. Risk level and main concerns
+3. Suggested comment for the author
+4. Suggested next steps or blockers
+`;
+      }
+
+      async function askAiAgent() {
+        try {
+          const repo = sanitizeText(repoInput.value);
+          const key = sanitizeText(openAiKey.value);
+          if (!key) {
+            throw new Error('Please provide an OpenAI API key.');
+          }
+
+          const contextText = githubJson.textContent;
+          if (contextText === 'No data loaded yet.' || contextText.trim() === '') {
+            throw new Error('Load GitHub data first so the AI has context to analyze.');
+          }
+
+          const context = JSON.parse(contextText);
+          const prompt = buildAiPrompt(context);
+
+          setStatus('Sending request to OpenAI…', 'success');
+
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+              model: modelSelect.value,
+              temperature: 0.35,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a helpful GitHub AI agent. Review issues and pull requests, summarize them clearly, suggest appropriate actions, and produce professional developer-friendly responses.'
+                },
+                { role: 'user', content: prompt }
+              ]
+            })
+          });
+
+          const json = await response.json();
+          if (!response.ok) {
+            const errorText = json?.error?.message || 'OpenAI request failed.';
+            throw new Error(errorText);
+          }
+
+          const content = json.choices?.[0]?.message?.content || 'No AI response returned.';
+          aiOutput.textContent = content;
+          setStatus('AI analysis completed.', 'success');
+        } catch (error) {
+          console.error(error);
+          aiOutput.textContent = 'AI request failed.\n\n' + (error.message || 'Unknown error');
+          setStatus(error.message || 'Unexpected AI request error.', 'error');
+        }
+      }
+
+      async function postAiComment() {
+        try {
+          const repo = sanitizeText(repoInput.value);
+          const num = Number(numberInput.value);
+          const token = sanitizeText(ghToken.value);
+          const message = aiOutput.textContent.trim();
+
+          if (!repo || !repo.includes('/')) {
+            throw new Error('Please provide a valid GitHub repo.');
+          }
+
+          if (!token) {
+            throw new Error('Please provide a GitHub token.');
+          }
+
+          if (!num || num < 1) {
+            throw new Error('Please provide a valid issue or PR number.');
+          }
+
+          if (!message || message === 'Waiting for analysis…' || message.startsWith('AI request failed.')) {
+            throw new Error('Generate an AI response before posting a comment.');
+          }
+
+          setStatus('Posting AI comment to GitHub…', 'success');
+
+          const response = await fetch(`https://api.github.com/repos/${repo}/issues/${num}/comments`, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': `Bearer ${token}`,
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'GitHub-AI-Agent-App',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ body: message })
+          });
+
+          const json = await response.json();
+          if (!response.ok) {
+            throw new Error(json?.message || 'GitHub comment creation failed.');
+          }
+
+          setStatus(`Comment posted successfully on ${repo} #${num}.`, 'success');
+          aiOutput.textContent = `Comment posted successfully.\n\n${message}`;
+        } catch (error) {
+          console.error(error);
+          setStatus(error.message || 'Unexpected comment post error.', 'error');
+        }
+      }
+
+      document.getElementById('loadBtn').addEventListener('click', loadGitHubData);
+      document.getElementById('askBtn').addEventListener('click', askAiAgent);
+      document.getElementById('postBtn').addEventListener('click', postAiComment);
+      repoInput.addEventListener('input', saveState);
+      targetType.addEventListener('change', saveState);
+      numberInput.addEventListener('input', saveState);
+      ghToken.addEventListener('input', saveState);
+      openAiKey.addEventListener('input', saveState);
+      modelSelect.addEventListener('change', saveState);
+
+      loadState();
+    </script>
+  </body>
+</html>
