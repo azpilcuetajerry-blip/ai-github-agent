@@ -197,6 +197,11 @@
       <div class="card">
         <div class="grid">
           <label>
+            Random Agent API Key
+            <input id="agentKeyInput" type="text" readonly placeholder="Generated key appears here" />
+          </label>
+
+          <label>
             GitHub repo
             <input id="repoInput" type="text" placeholder="owner/repository" value="octocat/Hello-World" />
           </label>
@@ -235,6 +240,7 @@
         </div>
 
         <div class="actions">
+          <button id="genKeyBtn" class="secondary">Generate New Random Key</button>
           <button id="loadBtn" class="primary">Load GitHub Data</button>
           <button id="askBtn" class="secondary">Ask AI Agent</button>
           <button id="postBtn" class="danger">Post AI Comment</button>
@@ -262,6 +268,7 @@
       const ghToken = document.getElementById('ghToken');
       const openAiKey = document.getElementById('openAiKey');
       const modelSelect = document.getElementById('modelSelect');
+      const agentKeyInput = document.getElementById('agentKeyInput');
       const statusBox = document.getElementById('status');
       const githubJson = document.getElementById('githubJson');
       const aiOutput = document.getElementById('aiOutput');
@@ -272,8 +279,19 @@
         number: 'gh_ai_agent_number',
         ghToken: 'gh_ai_agent_token',
         openAiKey: 'gh_ai_agent_openai_key',
-        model: 'gh_ai_agent_model'
+        model: 'gh_ai_agent_model',
+        agentKey: 'gh_ai_agent_random_key'
       };
+
+      function generateRandomKey() {
+        if (window.crypto && crypto.getRandomValues) {
+          const bytes = new Uint8Array(24);
+          crypto.getRandomValues(bytes);
+          return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        return 'gh-agent-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
+      }
 
       function setStatus(message, type = 'success') {
         statusBox.textContent = message;
@@ -289,6 +307,7 @@
         localStorage.setItem(storageKeys.ghToken, ghToken.value);
         localStorage.setItem(storageKeys.openAiKey, openAiKey.value);
         localStorage.setItem(storageKeys.model, modelSelect.value);
+        localStorage.setItem(storageKeys.agentKey, agentKeyInput.value);
       }
 
       function loadState() {
@@ -298,6 +317,18 @@
         ghToken.value = localStorage.getItem(storageKeys.ghToken) || '';
         openAiKey.value = localStorage.getItem(storageKeys.openAiKey) || '';
         modelSelect.value = localStorage.getItem(storageKeys.model) || modelSelect.value;
+
+        const savedKey = localStorage.getItem(storageKeys.agentKey);
+        const key = savedKey || generateRandomKey();
+        agentKeyInput.value = key;
+        localStorage.setItem(storageKeys.agentKey, key);
+      }
+
+      function generateNewKey() {
+        const newKey = generateRandomKey();
+        agentKeyInput.value = newKey;
+        localStorage.setItem(storageKeys.agentKey, newKey);
+        setStatus('New random API key generated.', 'success');
       }
 
       function sanitizeText(value) {
@@ -566,6 +597,7 @@ Return:
       document.getElementById('loadBtn').addEventListener('click', loadGitHubData);
       document.getElementById('askBtn').addEventListener('click', askAiAgent);
       document.getElementById('postBtn').addEventListener('click', postAiComment);
+      document.getElementById('genKeyBtn').addEventListener('click', generateNewKey);
       repoInput.addEventListener('input', saveState);
       targetType.addEventListener('change', saveState);
       numberInput.addEventListener('input', saveState);
